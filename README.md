@@ -1,1 +1,1 @@
-#snippets
+#  Basic code snippets needed in server management.
