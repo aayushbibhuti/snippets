@@ -21,8 +21,4 @@ find_logs
 
 select_log
 
-success "Ready."
-
-echo
-echo "Selected Log:"
-echo "  $LOG_FILE"
+analyze_log
