@@ -1,18 +1,27 @@
 #!/bin/bash
-# Parse auth.log for invalid SSH login attempts (unique by IP, with port)
 
-LOGFILE="/var/log/auth.log"   # Change to /var/log/secure on CentOS/RHEL
+LOGFILE="/var/log/auth.log"
 
-# Print header
-printf "%-15s %-15s %-20s %-10s\n" "DATE" "USER" "IP" "PORT"
-printf "%-15s %-15s %-20s %-10s\n" "---------------" "---------------" "--------------------" "----------"
+printf "%-16s %-20s %-16s %-6s\n" "DATE" "USER" "IP" "PORT"
+printf "%-16s %-20s %-16s %-6s\n" "----------------" "--------------------" "----------------" "------"
 
-# Extract "Invalid user" lines, parse fields, then deduplicate by IP
-grep "Invalid user" "$LOGFILE" | while read -r line; do
-    DATE="$(echo "$line" | awk '{print $1" "$2" "$3}')"
-    USER="$(echo "$line" | awk '{for(i=1;i<=NF;i++){if($i=="user"){print $(i+1);exit}}}')"
-    IP="$(echo "$line" | awk '{for(i=1;i<=NF;i++){if($i=="from"){print $(i+1);exit}}}')"
-    PORT="$(echo "$line" | awk '{for(i=1;i<=NF;i++){if($i=="port"){print $(i+1);exit}}}')"
-    echo -e "$DATE\t$USER\t$IP\t$PORT"
-done | awk -F'\t' '!seen[$3]++ {printf "%-15s %-15s %-20s %-10s\n", $1, $2, $3, $4}'
+awk '
+/Invalid user/ {
+    date=$1" "$2" "$3
 
+    user=""
+    ip=""
+    port=""
+
+    for(i=1;i<=NF;i++){
+        if($i=="user") user=$(i+1)
+        if($i=="from") ip=$(i+1)
+        if($i=="port") port=$(i+1)
+    }
+
+    if(!(ip in seen)){
+        seen[ip]=1
+        printf "%-16s %-20s %-16s %-6s\n", date,user,ip,port
+    }
+}
+' "$LOGFILE"
