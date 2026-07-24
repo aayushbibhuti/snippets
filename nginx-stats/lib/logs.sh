@@ -104,7 +104,7 @@ function print_divider() {
     print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
-function fmt_num(n) {
+function fmt_num(n, s) {
     s = ""
     while (n >= 1000) {
         if (s == "") s = sprintf("%03d", n % 1000)

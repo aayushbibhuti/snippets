@@ -22,3 +22,11 @@ find_logs
 select_log
 
 analyze_log
+
+if [[ -n "$SCORE_MODE" ]]
+then
+
+source "$BASE_DIR/lib/score.sh"
+analyze_abuse
+
+fi

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 LOG_FILE=""
+SCORE_MODE=""
 
 usage() {
 
@@ -12,9 +13,10 @@ nginx-stats [options]
 
 Options
 
---log FILE
---help
---version
+--log FILE    Path to nginx access log
+--score       Run abuse detection and scoring
+--help        Show this help
+--version     Show version
 
 EOF
 
@@ -44,6 +46,12 @@ exit 0
 
 LOG_FILE="$2"
 shift 2
+;;
+
+--score)
+
+SCORE_MODE=1
+shift
 ;;
 
 *)
