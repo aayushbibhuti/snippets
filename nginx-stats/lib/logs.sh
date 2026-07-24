@@ -88,6 +88,9 @@ info "Counting lines..."
 local total
 total=$(wc -l < "$LOG_FILE")
 
+local report_file
+report_file="nginx-stats-$(basename "$LOG_FILE" .log)-$(date +%Y%m%d-%H%M%S).txt"
+
 echo
 
 echo "Progress"
@@ -159,18 +162,18 @@ BEGIN {
         if (pct > last_pct) {
             last_pct = pct
             bars = int(pct * bar_width / 100)
-            printf "\r["
+            printf "\r[" > "/dev/stderr"
             for (b = 0; b < bar_width; b++) {
-                if (b < bars) printf "█"
-                else printf " "
+                if (b < bars) printf "█" > "/dev/stderr"
+                else printf " " > "/dev/stderr"
             }
-            printf "] %d%%", pct
+            printf "] %d%%", pct > "/dev/stderr"
         }
     }
 }
 
 END {
-    printf "\r\033[K"
+    printf "\r\033[K" > "/dev/stderr"
 
     print ""
     print_divider()
@@ -246,8 +249,10 @@ END {
     }
     print ""
 }
-' "$LOG_FILE"
+' "$LOG_FILE" > "$REPORT_DIR/$report_file"
 
-success "Report generated."
+cat "$REPORT_DIR/$report_file"
+
+success "Report saved: $REPORT_DIR/$report_file"
 
 }
