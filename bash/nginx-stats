@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+#
+# nginx-abuse-detector.sh
+#
+
+LOG="/var/log/nginx/access.log"
+
+REPORT="report.txt"
+BANLIST="banlist.txt"
+REVIEW="review.txt"
+STATS="stats.txt"
+
+if [ ! -f "$LOG" ]; then
+    echo "Log file not found: $LOG"
+    exit 1
+fi
+
+TMP=$(mktemp)
+
+##############################################################################
+# Count requests/IP
+##############################################################################
+
+awk '{print $1}' "$LOG" | sort | uniq -c > "$TMP"
+
+TOTAL_REQUESTS=$(awk '{s+=$1} END{print s}' "$TMP")
+UNIQUE_IPS=$(wc -l < "$TMP")
+
+AVERAGE=$(awk -v t="$TOTAL_REQUESTS" -v u="$UNIQUE_IPS" \
+'BEGIN{
+    if(u==0) print 0;
+    else printf "%.2f",t/u;
+}')
+
+##############################################################################
+# 99th percentile
+##############################################################################
+
+P99=$(awk '{print $1}' "$TMP" | sort -n | awk '
+{
+    a[NR]=$1
+}
+END{
+    if(NR==0){
+        print 100
+        exit
+    }
+
+    idx=int(NR*0.99)
+    if(idx<1) idx=1
+
+    print a[idx]
+}')
+
+##############################################################################
+# Automatic threshold
+##############################################################################
+
+THRESHOLD=$((P99*3))
+
+if [ "$THRESHOLD" -lt 100 ]; then
+    THRESHOLD=100
+fi
+
+##############################################################################
+# Stats
+##############################################################################
+
+cat > "$STATS" <<EOF
+==============================
+NGINX TRAFFIC STATISTICS
+==============================
+
+Total Requests : $TOTAL_REQUESTS
+Unique IPs     : $UNIQUE_IPS
+Average/IP     : $AVERAGE
+99th Percentile: $P99
+
+Automatic Threshold:
+$THRESHOLD requests
+EOF
+
+##############################################################################
+# Build score database
+##############################################################################
+
+awk -v threshold="$THRESHOLD" '
+
+function add(ip,v){
+    score[ip]+=v
+}
+
+{
+    ip=$1
+
+    requests[ip]++
+
+    code=$9
+
+    if(code=="404") errors404[ip]++
+
+    url=$7
+
+    if(url ~ /wp-login|xmlrpc|\.env|phpmyadmin|\.git|HNAP1|cgi-bin|boaform|composer\.json/)
+        add(ip,3)
+
+    if(url ~ /\.\.\//)
+        add(ip,3)
+
+    ua=""
+
+    for(i=12;i<=NF;i++)
+        ua=ua" "$i
+
+    if(ua ~ /curl|python|Go-http-client|sqlmap|masscan|zgrab|wget/)
+        add(ip,2)
+
+    ts=$4
+    gsub(/\[/,"",ts)
+    split(ts,a,":")
+
+    sec=a[1]":"a[2]":"a[3]":"a[4]
+
+    key=ip" "sec
+    burst[key]++
+}
+
+END{
+
+    for(k in burst){
+
+        split(k,x," ")
+
+        ip=x[1]
+
+        if(burst[k]>20)
+            add(ip,2)
+
+    }
+
+    for(ip in requests){
+
+        if(requests[ip]>threshold)
+            add(ip,4)
+
+        if(errors404[ip]>100)
+            add(ip,2)
+
+        printf "%s %d %d %d\n",
+            ip,
+            requests[ip],
+            errors404[ip],
+            score[ip]
+
+    }
+
+}
+' "$LOG" | sort -k4 -nr > /tmp/nginx_scores.txt
+
+##############################################################################
+# Generate reports
+##############################################################################
+
+echo "NGINX Abuse Report" > "$REPORT"
+echo "Threshold: $THRESHOLD requests" >> "$REPORT"
+echo "" >> "$REPORT"
+
+> "$BANLIST"
+> "$REVIEW"
+
+printf "%-18s %-10s %-10s %-10s %-10s\n" \
+IP REQUESTS 404 SCORE ACTION >> "$REPORT"
+
+while read ip req err score
+do
+
+    action="OK"
+
+    if [ "$score" -ge 5 ]; then
+
+        action="BAN"
+
+        echo "$ip" >> "$BANLIST"
+
+    elif [ "$score" -ge 3 ]; then
+
+        action="REVIEW"
+
+        echo "$ip" >> "$REVIEW"
+
+    fi
+
+    printf "%-18s %-10s %-10s %-10s %-10s\n" \
+        "$ip" "$req" "$err" "$score" "$action" >> "$REPORT"
+
+done < /tmp/nginx_scores.txt
+
+rm -f "$TMP" /tmp/nginx_scores.txt
+
+echo
+echo "Done."
+echo "Statistics : $STATS"
+echo "Report     : $REPORT"
+echo "Ban List   : $BANLIST"
+echo "Review     : $REVIEW"
