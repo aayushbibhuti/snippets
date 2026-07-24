@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+#VERSION="$(cat VERSION)"
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source "$BASE_DIR/lib/colors.sh"
+source "$BASE_DIR/lib/logger.sh"
+source "$BASE_DIR/lib/config.sh"
+source "$BASE_DIR/lib/args.sh"
+source "$BASE_DIR/lib/logs.sh"
+
+print_banner
+
+load_config
+
+parse_args "$@"
+
+find_logs
+
+select_log
+
+success "Ready."
+
+echo
+echo "Selected Log:"
+echo "  $LOG_FILE"
